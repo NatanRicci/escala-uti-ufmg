@@ -659,7 +659,7 @@ function buildModalBody(k,dd,limit,feriado){
   if(feriado)html+=`<div class="info-bar info-amber">Feriado: ${feriado} — limite de ${limit} plantonista${limit>1?'s':''} por UCO</div>`;
 
   UCOS.forEach(uco=>{
-    const slotsCount=countSlots(dd,uco);const isFull=slotsCount>=limit;
+    const slotsCount=countSlots(dd,uco);const isFull=TURNOS.every(t=>dd[uco]&&dd[uco][t.id]);
     const pendingCands=candidaturas.filter(c=>c.dayKey===k&&c.uco===uco&&c.status==='pendente');
     html+=`<div class="uco-section"><div class="uco-section-header uco-${uco}-header">${UCO_NAMES[uco]}<span style="font-size:11px;font-weight:500;opacity:0.8;">${slotsCount}/${limit} turnos</span></div><div class="uco-section-body">`;
 
@@ -747,9 +747,8 @@ function closeModal(){document.getElementById('modal-overlay').classList.add('hi
 
 async function addTurno(k,uco){
   const tid=document.getElementById(`sel-t-${uco}`)?.value;const u=document.getElementById(`sel-p-${uco}`)?.value;
-  if(!tid||!u)return;
-  const [ys,ms,ds]=k.split('-').map(Number);const limit=getLimit(ys,ms-1,ds);const dd=getDayData(k);
-  if(countSlots(dd,uco)>=limit){showToast('Limite atingido!');return;}
+  if(!tid||!u||u===''){showToast('Selecione um plantonista');return;}
+  const dd=getDayData(k);
   if(dd[uco]&&dd[uco][tid]){showToast('Turno já preenchido!');return;}
   if(userOnSameTurno(u,k,uco,tid)){showToast(`${members[u].name} já está escalado(a) neste mesmo turno na outra UCO!`);return;}
   if(!schedule[k])schedule[k]=emptyDay();
