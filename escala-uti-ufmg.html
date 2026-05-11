@@ -814,7 +814,7 @@ async function assumirAnuncio(k,uco,tid,prevUser){
 // Render anúncios tab
 function renderAnuncios(){
   const now=new Date();const todayK=dayKey(now.getFullYear(),now.getMonth(),now.getDate());
-  const items=anunciosDocs.filter(a=>a.status==='ativo'&&a.dayKey>=todayK).sort((a,b)=>a.dayKey.localeCompare(b.dayKey));
+  const items=anunciosDocs.filter(a=>a.status==='ativo').sort((a,b)=>a.dayKey.localeCompare(b.dayKey));
   const list=document.getElementById('anuncios-list');
   if(!items.length){list.innerHTML='<div class="empty-state">Nenhum plantão anunciado no momento.</div>';return;}
   list.innerHTML=items.map(item=>{
