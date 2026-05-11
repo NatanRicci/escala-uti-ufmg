@@ -529,7 +529,28 @@ function startApp(){
 function countSlots(dd,uco){return TURNOS.filter(t=>dd[uco]&&dd[uco][t.id]).length;}
 function userOnDay(u,k){const dd=getDayData(k);return UCOS.some(uco=>TURNOS.some(t=>dd[uco]&&dd[uco][t.id]===u));}
 function userOnUco(u,k,uco){const dd=getDayData(k);return TURNOS.some(t=>dd[uco]&&dd[uco][t.id]===u);}
-function userOnDayOtherUco(u,k,targetUco){const dd=getDayData(k);return UCOS.filter(uco=>uco!==targetUco).some(uco=>TURNOS.some(t=>dd[uco]&&dd[uco][t.id]===u));}
+function userOnSameTurno(u,k,uco,tid){
+  // Verifica se o plantonista já está escalado no MESMO turno na OUTRA UCO
+  const dd=getDayData(k);
+  return UCOS.filter(o=>o!==uco).some(o=>dd[o]&&dd[o][tid]===u);
+}
+function userOnSameTurnoInline(u,k,uco,tid,dd){
+  return UCOS.filter(o=>o!==uco).some(o=>dd[o]&&dd[o][tid]===u);
+}
+// Expõe globalmente para uso inline no HTML
+window._modalState={};
+function registerModalState(k,uco,dd,available){
+  window._modalState[uco]={k,dd,available};
+}
+window.updateAvailPeople_a=function(tid){_updateAvailPeople('a',tid);};
+window.updateAvailPeople_b=function(tid){_updateAvailPeople('b',tid);};
+function _updateAvailPeople(uco,tid){
+  const state=window._modalState[uco];if(!state)return;
+  const sel=document.getElementById(`sel-p-${uco}`);if(!sel)return;
+  const filtered=state.available.filter(u=>!userOnSameTurnoInline(u,state.k,uco,tid,state.dd));
+  sel.innerHTML=filtered.map(u=>`<option value="${u}">${members[u].name}</option>`).join('');
+  if(!filtered.length)sel.innerHTML='<option value="">Nenhum disponível</option>';
+}
 function isAnunciado(k,uco,tid){return !!(anuncios[k]&&anuncios[k][uco]&&anuncios[k][uco][tid]);}
 function hasAnuncioOnDay(k){return UCOS.some(uco=>TURNOS.some(t=>isAnunciado(k,uco,t.id)));}
 
@@ -683,9 +704,12 @@ function buildModalBody(k,dd,limit,feriado){
       const available=Object.keys(members).filter(u=>!(dd[uco]&&Object.values(dd[uco]).includes(u)));
       const vacantTurnos=TURNOS.filter(t=>!(dd[uco]&&dd[uco][t.id]));
       if(available.length>0&&vacantTurnos.length>0){
+        registerModalState(k,uco,dd,available);
+        const firstTid=vacantTurnos[0].id;
+        const filteredFirst=available.filter(u=>!userOnSameTurnoInline(u,k,uco,firstTid,dd));
         html+=`<div class="add-turno-row">
-          <select id="sel-t-${uco}">${vacantTurnos.map(t=>`<option value="${t.id}">${t.label} (${t.time})</option>`).join('')}</select>
-          <select id="sel-p-${uco}">${available.map(u=>`<option value="${u}">${members[u].name}</option>`).join('')}</select>
+          <select id="sel-t-${uco}" onchange="updateAvailPeople_${uco}(this.value)">${vacantTurnos.map(t=>`<option value="${t.id}">${t.label} (${t.time})</option>`).join('')}</select>
+          <select id="sel-p-${uco}">${filteredFirst.length?filteredFirst.map(u=>`<option value="${u}">${members[u].name}</option>`).join(''):'<option value="">Nenhum disponível</option>'}</select>
           <button class="btn-add-turno btn-add-${uco}" data-uco="${uco}">Adicionar</button>
         </div>`;
       }
@@ -726,7 +750,8 @@ async function addTurno(k,uco){
   if(!tid||!u)return;
   const [ys,ms,ds]=k.split('-').map(Number);const limit=getLimit(ys,ms-1,ds);const dd=getDayData(k);
   if(countSlots(dd,uco)>=limit){showToast('Limite atingido!');return;}
-  if(userOnUco(u,k,uco)){showToast(`${members[u].name} já está escalado(a) nesta UCO neste dia!`);return;}
+  if(dd[uco]&&dd[uco][tid]){showToast('Turno já preenchido!');return;}
+  if(userOnSameTurno(u,k,uco,tid)){showToast(`${members[u].name} já está escalado(a) neste mesmo turno na outra UCO!`);return;}
   if(!schedule[k])schedule[k]=emptyDay();
   schedule[k][uco][tid]=u;
   await saveSchedule();showToast(`${members[u].name} adicionado(a)!`);
@@ -833,6 +858,7 @@ async function aprovarCandidatura(cid,k,uco,tid,u){
   const [ys,ms,ds]=k.split('-').map(Number);const limit=getLimit(ys,ms-1,ds);const dd=getDayData(k);
   if(countSlots(dd,uco)>=limit){showToast('Limite atingido!');return;}
   if(userOnUco(u,k,uco)){showToast(`${members[u]?.name} já está escalado(a) nesta UCO neste dia!`);return;}
+  if(userOnSameTurno(u,k,uco,tid)){showToast(`${members[u]?.name} já está no mesmo turno na outra UCO!`);return;}
   if(dd[uco]&&dd[uco][tid]){showToast('Turno já preenchido!');return;}
   if(!schedule[k])schedule[k]=emptyDay();
   schedule[k][uco][tid]=u;
