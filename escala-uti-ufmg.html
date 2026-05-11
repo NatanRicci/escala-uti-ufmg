@@ -423,7 +423,7 @@ function getEaster(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4)
 function getFeriados(y){const e=getEaster(y),add=(d,n)=>{const r=new Date(d);r.setDate(r.getDate()+n);return r;},fmt=d=>`${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;return{...FERIADOS_FIXOS,[fmt(add(e,-47))]:'Carnaval',[fmt(add(e,-48))]:'Carnaval',[fmt(add(e,-2))]:'Sexta-feira Santa',[fmt(e)]:'Páscoa',[fmt(add(e,60))]:'Corpus Christi'};}
 function isFeriado(y,m,d){return getFeriados(y)[`${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`]||null;}
 function isWeekend(y,m,d){const w=new Date(y,m,d).getDay();return w===0||w===6;}
-function getLimit(y,m,d){return(isWeekend(y,m,d)||isFeriado(y,m,d))?2:3;}
+function getLimit(y,m,d){return 3;}
 function dayKey(y,m,d){return`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
 function initials(n){return n.split(' ').slice(0,2).map(p=>p[0]).join('').toUpperCase();}
 function avatarBg(idx){return AVATAR_COLORS[(idx||0)%AVATAR_COLORS.length];}
@@ -523,6 +523,8 @@ function startApp(){
 function getDayData(k){return schedule[k]||emptyDay();}
 function countSlots(dd,uco){return TURNOS.filter(t=>dd[uco]&&dd[uco][t.id]).length;}
 function userOnDay(u,k){const dd=getDayData(k);return UCOS.some(uco=>TURNOS.some(t=>dd[uco]&&dd[uco][t.id]===u));}
+function userOnUco(u,k,uco){const dd=getDayData(k);return TURNOS.some(t=>dd[uco]&&dd[uco][t.id]===u);}
+function userOnDayOtherUco(u,k,targetUco){const dd=getDayData(k);return UCOS.filter(uco=>uco!==targetUco).some(uco=>TURNOS.some(t=>dd[uco]&&dd[uco][t.id]===u));}
 function isAnunciado(k,uco,tid){return !!(anuncios[k]&&anuncios[k][uco]&&anuncios[k][uco][tid]);}
 function hasAnuncioOnDay(k){return UCOS.some(uco=>TURNOS.some(t=>isAnunciado(k,uco,t.id)));}
 
@@ -673,7 +675,7 @@ function buildModalBody(k,dd,limit,feriado){
 
     // Add row gestão
     if(canManageUco(uco)&&!isFull){
-      const available=Object.keys(members).filter(u=>!(dd[uco]&&Object.values(dd[uco]).includes(u))&&!userOnDay(u,k));
+      const available=Object.keys(members).filter(u=>!(dd[uco]&&Object.values(dd[uco]).includes(u)));
       const vacantTurnos=TURNOS.filter(t=>!(dd[uco]&&dd[uco][t.id]));
       if(available.length>0&&vacantTurnos.length>0){
         html+=`<div class="add-turno-row">
@@ -719,7 +721,7 @@ async function addTurno(k,uco){
   if(!tid||!u)return;
   const [ys,ms,ds]=k.split('-').map(Number);const limit=getLimit(ys,ms-1,ds);const dd=getDayData(k);
   if(countSlots(dd,uco)>=limit){showToast('Limite atingido!');return;}
-  if(userOnDay(u,k)){showToast(`${members[u].name} já está escalado(a) neste dia!`);return;}
+  if(userOnUco(u,k,uco)){showToast(`${members[u].name} já está escalado(a) nesta UCO neste dia!`);return;}
   if(!schedule[k])schedule[k]=emptyDay();
   schedule[k][uco][tid]=u;
   await saveSchedule();showToast(`${members[u].name} adicionado(a)!`);
@@ -825,7 +827,7 @@ async function candidatarModal(k,uco,tid){
 async function aprovarCandidatura(cid,k,uco,tid,u){
   const [ys,ms,ds]=k.split('-').map(Number);const limit=getLimit(ys,ms-1,ds);const dd=getDayData(k);
   if(countSlots(dd,uco)>=limit){showToast('Limite atingido!');return;}
-  if(userOnDay(u,k)){showToast(`${members[u]?.name} já está escalado(a) neste dia!`);return;}
+  if(userOnUco(u,k,uco)){showToast(`${members[u]?.name} já está escalado(a) nesta UCO neste dia!`);return;}
   if(dd[uco]&&dd[uco][tid]){showToast('Turno já preenchido!');return;}
   if(!schedule[k])schedule[k]=emptyDay();
   schedule[k][uco][tid]=u;
