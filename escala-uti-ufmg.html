@@ -437,7 +437,7 @@ function getDayData(k){
 
 // anuncios: { [dayKey]: { [uco]: { [tid]: username } } }
 let currentUser=null,userRole=null;
-let members={},schedule={},anuncios={},trocas=[],candidaturas=[];
+let members={},schedule={},anuncios={},anunciosDocs=[],trocas=[],candidaturas=[];
 let viewYear=new Date().getFullYear(),viewMonth=new Date().getMonth();
 let modalDay=null,unsubSched=null,unsubTrocas=null,unsubCand=null,unsubAnuncios=null,toastTimer=null;
 
@@ -463,7 +463,6 @@ async function loadMembers(){
 }
 async function saveMembers(){await setDoc(doc(db,'config','members'),members);}
 async function saveSchedule(){await setDoc(doc(db,'config','schedule'),schedule);}
-async function saveAnuncios(){await setDoc(doc(db,'config','anuncios'),anuncios);}
 
 // AUTH
 document.getElementById('btn-login').onclick=doLogin;
@@ -518,7 +517,19 @@ function startApp(){
   document.getElementById('confirm-cancel').onclick=()=>{document.getElementById('confirm-overlay').classList.add('hidden');confirmCallback=null;};
 
   unsubSched=onSnapshot(doc(db,'config','schedule'),snap=>{schedule=snap.exists()?snap.data():{};renderCalendar();renderStats();if(modalDay)openModal(modalDay.y,modalDay.m,modalDay.d);});
-  unsubAnuncios=onSnapshot(doc(db,'config','anuncios'),snap=>{anuncios=snap.exists()?snap.data():{};renderCalendar();renderAnuncios();if(modalDay)openModal(modalDay.y,modalDay.m,modalDay.d);});
+  unsubAnuncios=onSnapshot(collection(db,'anuncios'),snap=>{
+    // Reconstrói anuncios como objeto indexado por dayKey/uco/tid
+    anuncios={};
+    snap.docs.forEach(d=>{
+      const a={id:d.id,...d.data()};
+      if(a.status!=='ativo')return;
+      if(!anuncios[a.dayKey])anuncios[a.dayKey]={};
+      if(!anuncios[a.dayKey][a.uco])anuncios[a.dayKey][a.uco]={};
+      anuncios[a.dayKey][a.uco][a.turnoId]=a.anunciante;
+    });
+    anunciosDocs=snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderCalendar();renderAnuncios();if(modalDay)openModal(modalDay.y,modalDay.m,modalDay.d);
+  });
   unsubTrocas=onSnapshot(collection(db,'trocas'),snap=>{trocas=snap.docs.map(d=>({id:d.id,...d.data()}));renderTrocas();updateBadges();});
   unsubCand=onSnapshot(collection(db,'candidaturas'),snap=>{candidaturas=snap.docs.map(d=>({id:d.id,...d.data()}));renderCandidaturas();updateBadges();if(modalDay)openModal(modalDay.y,modalDay.m,modalDay.d);});
 
@@ -764,29 +775,35 @@ async function removeTurno(k,uco,tid){
   if(anuncios[k]&&anuncios[k][uco])anuncios[k][uco][tid]=null;
   const anyLeft=UCOS.some(u=>TURNOS.some(t=>schedule[k]&&schedule[k][u]&&schedule[k][u][t.id]));
   if(!anyLeft)delete schedule[k];
-  await saveSchedule();await saveAnuncios();showToast(`${name} removido(a)`);
+  await saveSchedule();
+  // Cancela anúncio se existir
+  const docA=anunciosDocs.find(a=>a.dayKey===k&&a.uco===uco&&a.turnoId===tid&&a.status==='ativo');
+  if(docA)await updateDoc(doc(db,'anuncios',docA.id),{status:'cancelado'});
+  showToast(`${name} removido(a)`);
 }
 
 // ANÚNCIOS
 async function anunciarTurno(k,uco,tid){
-  if(!anuncios[k])anuncios[k]={};
-  if(!anuncios[k][uco])anuncios[k][uco]={};
-  anuncios[k][uco][tid]=currentUser;
-  await saveAnuncios();showToast('Plantão anunciado! Colegas podem assumir.');
+  const existe=anunciosDocs.find(a=>a.dayKey===k&&a.uco===uco&&a.turnoId===tid&&a.status==='ativo');
+  if(existe){showToast('Plantão já anunciado!');return;}
+  await addDoc(collection(db,'anuncios'),{anunciante:currentUser,dayKey:k,uco,turnoId:tid,status:'ativo',criadoEm:new Date().toISOString()});
+  showToast('Plantão anunciado! Colegas podem assumir.');
 }
 
 async function cancelarAnuncio(k,uco,tid){
-  if(anuncios[k]&&anuncios[k][uco])anuncios[k][uco][tid]=null;
-  await saveAnuncios();showToast('Anúncio cancelado.');
+  const docA=anunciosDocs.find(a=>a.dayKey===k&&a.uco===uco&&a.turnoId===tid&&a.status==='ativo');
+  if(docA)await updateDoc(doc(db,'anuncios',docA.id),{status:'cancelado'});
+  showToast('Anúncio cancelado.');
 }
 
 async function assumirAnuncio(k,uco,tid,prevUser){
-  if(userOnDay(currentUser,k)){showToast('Você já está escalado(a) neste dia!');return;}
+  if(userOnSameTurno(currentUser,k,uco,tid)){showToast('Você já está neste turno na outra UCO!');return;}
   showConfirm('Assumir plantão',`Você vai assumir o plantão de ${members[prevUser]?.name||prevUser} em ${shiftLabel(k,uco,tid)}. Deseja continuar?`,async()=>{
     if(!schedule[k])schedule[k]=emptyDay();
     schedule[k][uco][tid]=currentUser;
-    if(anuncios[k]&&anuncios[k][uco])anuncios[k][uco][tid]=null;
-    await saveSchedule();await saveAnuncios();
+    await saveSchedule();
+    const docA=anunciosDocs.find(a=>a.dayKey===k&&a.uco===uco&&a.turnoId===tid&&a.status==='ativo');
+    if(docA)await updateDoc(doc(db,'anuncios',docA.id),{status:'assumido'});
     showToast('Plantão assumido com sucesso!');
   });
 }
