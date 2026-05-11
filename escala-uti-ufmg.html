@@ -811,30 +811,19 @@ async function assumirAnuncio(k,uco,tid,prevUser){
 // Render anúncios tab
 function renderAnuncios(){
   const now=new Date();const todayK=dayKey(now.getFullYear(),now.getMonth(),now.getDate());
-  const items=[];
-  Object.keys(anuncios).filter(k=>k>=todayK).sort().forEach(k=>{
-    UCOS.forEach(uco=>{
-      TURNOS.forEach(t=>{
-        const anunciante=anuncios[k]&&anuncios[k][uco]&&anuncios[k][uco][t.id];
-        if(anunciante){
-          const dd=getDayData(k);const assigned=dd[uco]&&dd[uco][t.id];
-          if(assigned===anunciante)items.push({k,uco,tid:t.id,anunciante});
-        }
-      });
-    });
-  });
+  const items=anunciosDocs.filter(a=>a.status==='ativo'&&a.dayKey>=todayK).sort((a,b)=>a.dayKey.localeCompare(b.dayKey));
   const list=document.getElementById('anuncios-list');
   if(!items.length){list.innerHTML='<div class="empty-state">Nenhum plantão anunciado no momento.</div>';return;}
   list.innerHTML=items.map(item=>{
     const nome=members[item.anunciante]?.name||item.anunciante;
     const isMe=item.anunciante===currentUser;
-    const canAssume=!isMe&&!userOnDay(currentUser,item.k);
+    const canAssume=!isMe&&!userOnSameTurno(currentUser,item.dayKey,item.uco,item.turnoId);
     return `<div class="troca-card" style="border-color:var(--orange-mid);background:var(--orange-light);">
       <div class="troca-header"><span class="troca-status" style="background:var(--orange-light);color:var(--orange);border:1px solid var(--orange-mid);">📢 Anunciado</span></div>
-      <div class="troca-desc"><strong>${nome}</strong> busca substituto para:<br>${shiftLabel(item.k,item.uco,item.tid)}</div>
+      <div class="troca-desc"><strong>${nome}</strong> busca substituto para:<br>${shiftLabel(item.dayKey,item.uco,item.turnoId)}</div>
       <div class="troca-actions">
-        ${canAssume?`<button class="btn-assumir btn-accept" data-k="${item.k}" data-uco="${item.uco}" data-tid="${item.tid}" data-prev="${item.anunciante}">Assumir plantão</button>`:''}
-        ${isMe?`<button class="btn-cancelar-anuncio btn-reject" data-k="${item.k}" data-uco="${item.uco}" data-tid="${item.tid}">Cancelar anúncio</button>`:''}
+        ${canAssume?`<button class="btn-assumir btn-accept" data-k="${item.dayKey}" data-uco="${item.uco}" data-tid="${item.turnoId}" data-prev="${item.anunciante}">Assumir plantão</button>`:''}
+        ${isMe?`<button class="btn-cancelar-anuncio btn-reject" data-k="${item.dayKey}" data-uco="${item.uco}" data-tid="${item.turnoId}">Cancelar anúncio</button>`:''}
       </div>
     </div>`;
   }).join('');
