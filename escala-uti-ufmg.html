@@ -428,6 +428,12 @@ function dayKey(y,m,d){return`${y}-${String(m+1).padStart(2,'0')}-${String(d).pa
 function initials(n){return n.split(' ').slice(0,2).map(p=>p[0]).join('').toUpperCase();}
 function avatarBg(idx){return AVATAR_COLORS[(idx||0)%AVATAR_COLORS.length];}
 function emptyDay(){return{a:{t1:null,t2:null,t3:null},b:{t1:null,t2:null,t3:null}};}
+function getDayData(k){
+  const d=schedule[k]||emptyDay();
+  // Garantir que todos os turnos existem (compatibilidade com dados antigos)
+  UCOS.forEach(uco=>{if(!d[uco])d[uco]={t1:null,t2:null,t3:null};TURNOS.forEach(t=>{if(d[uco][t.id]===undefined)d[uco][t.id]=null;});});
+  return d;
+}
 
 // anuncios: { [dayKey]: { [uco]: { [tid]: username } } }
 let currentUser=null,userRole=null;
@@ -520,7 +526,6 @@ function startApp(){
 }
 
 // HELPERS
-function getDayData(k){return schedule[k]||emptyDay();}
 function countSlots(dd,uco){return TURNOS.filter(t=>dd[uco]&&dd[uco][t.id]).length;}
 function userOnDay(u,k){const dd=getDayData(k);return UCOS.some(uco=>TURNOS.some(t=>dd[uco]&&dd[uco][t.id]===u));}
 function userOnUco(u,k,uco){const dd=getDayData(k);return TURNOS.some(t=>dd[uco]&&dd[uco][t.id]===u);}
