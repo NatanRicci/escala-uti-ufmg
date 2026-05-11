@@ -517,6 +517,7 @@ function startApp(){
   document.getElementById('confirm-cancel').onclick=()=>{document.getElementById('confirm-overlay').classList.add('hidden');confirmCallback=null;};
 
   unsubSched=onSnapshot(doc(db,'config','schedule'),snap=>{schedule=snap.exists()?snap.data():{};renderCalendar();renderStats();if(modalDay)openModal(modalDay.y,modalDay.m,modalDay.d);});
+  onSnapshot(doc(db,'config','members'),snap=>{if(snap.exists()){members=snap.data();renderAnuncios();renderCalendar();}});
   unsubAnuncios=onSnapshot(collection(db,'anuncios'),snap=>{
     // Reconstrói anuncios como objeto indexado por dayKey/uco/tid
     anuncios={};
@@ -820,7 +821,8 @@ function renderAnuncios(){
   list.innerHTML=items.map(item=>{
     const nome=members[item.anunciante]?.name||item.anunciante;
     const isMe=item.anunciante===currentUser;
-    const canAssume=!isMe&&!userOnSameTurno(currentUser,item.dayKey,item.uco,item.turnoId);
+    const turnoOcupado=userOnSameTurno(currentUser,item.dayKey,item.uco,item.turnoId);
+    const canAssume=!isMe&&!turnoOcupado;
     return `<div class="troca-card" style="border-color:var(--orange-mid);background:var(--orange-light);">
       <div class="troca-header"><span class="troca-status" style="background:var(--orange-light);color:var(--orange);border:1px solid var(--orange-mid);">📢 Anunciado</span></div>
       <div class="troca-desc"><strong>${nome}</strong> busca substituto para:<br>${shiftLabel(item.dayKey,item.uco,item.turnoId)}</div>
@@ -1068,7 +1070,7 @@ function showTab(name){
   }
   if(name==='trocas')populateTrocaForm();
   if(name==='candidaturas')renderCandidaturas();
-  if(name==='anuncios')renderAnuncios();
+  if(name==='anuncios'){renderAnuncios();setTimeout(renderAnuncios,800);}
 }
 
 // CONFIRM
