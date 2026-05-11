@@ -530,7 +530,10 @@ function startApp(){
     anunciosDocs=snap.docs.map(d=>({id:d.id,...d.data()}));
     renderCalendar();renderAnuncios();if(modalDay)openModal(modalDay.y,modalDay.m,modalDay.d);
   });
-  unsubTrocas=onSnapshot(collection(db,'trocas'),snap=>{trocas=snap.docs.map(d=>({id:d.id,...d.data()}));renderTrocas();updateBadges();});
+  unsubTrocas=onSnapshot(collection(db,'trocas'),snap=>{
+    try{trocas=snap.docs.map(d=>({id:d.id,...d.data()}));renderTrocas();updateBadges();}
+    catch(e){console.error('Erro trocas:',e);}
+  });
   unsubCand=onSnapshot(collection(db,'candidaturas'),snap=>{candidaturas=snap.docs.map(d=>({id:d.id,...d.data()}));renderCandidaturas();updateBadges();if(modalDay)openModal(modalDay.y,modalDay.m,modalDay.d);});
 
   showTab('calendar');
@@ -947,12 +950,12 @@ async function solicitarTroca(){
 
 function renderTrocas(){
   populateTrocaForm();
-  const relevant=trocas.filter(t=>t.solicitante===currentUser||t.receptor===currentUser);
+  const relevant=trocas.filter(t=>(t.solicitante===currentUser||t.receptor===currentUser)&&t.turnSolicitante&&t.turnReceptor);
   const container=document.getElementById('trocas-list');
   if(!relevant.length){container.innerHTML='<div class="empty-state">Nenhuma troca solicitada.</div>';return;}
   container.innerHTML=relevant.sort((a,b)=>b.criadoEm.localeCompare(a.criadoEm)).map(t=>{
     const solNome=members[t.solicitante]?.name||t.solicitante;const recNome=members[t.receptor]?.name||t.receptor;
-    const [sk,suco,stid]=t.turnSolicitante.split('|');const [rk,ruco,rtid]=t.turnReceptor.split('|');
+    const [sk,suco,stid]=(t.turnSolicitante||'||').split('|');const [rk,ruco,rtid]=(t.turnReceptor||'||').split('|');
     const sl=t.status==='pendente'?'Pendente':t.status==='aceita'?'Aceita':t.status==='cancelada'?'Cancelada':'Recusada';
     const sc=t.status==='pendente'?'status-pending':t.status==='aceita'?'status-accepted':'status-rejected';
     const canRespond=t.status==='pendente'&&t.receptor===currentUser;
