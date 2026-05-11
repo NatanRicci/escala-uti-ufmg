@@ -352,6 +352,14 @@ main{max-width:860px;margin:0 auto;padding:1.5rem 1rem 4rem;}
                 <option value="admin">Admin</option>
               </select>
             </div>
+            <div id="new-uco-field">
+              <label class="add-form-label">UCO (coord)</label>
+              <select id="new-uco">
+                <option value="">Ambas</option>
+                <option value="a">UCO-Coronária</option>
+                <option value="b">UCO-PO</option>
+              </select>
+            </div>
             <button class="btn-primary" id="btn-add-member" style="grid-column:1/-1;">Adicionar membro</button>
           </div>
         </div>
@@ -428,6 +436,15 @@ let viewYear=new Date().getFullYear(),viewMonth=new Date().getMonth();
 let modalDay=null,unsubSched=null,unsubTrocas=null,unsubCand=null,unsubAnuncios=null,toastTimer=null;
 
 const canManage=()=>userRole==='admin'||userRole==='coord';
+const canManageUco=(uco)=>{
+  if(userRole==='admin')return true;
+  if(userRole==='coord'){
+    const m=members[currentUser];
+    // coord sem uco específica gerencia tudo, com uco só gerencia a sua
+    return !m.uco || m.uco===uco;
+  }
+  return false;
+};
 const isPlantonista=()=>userRole==='plantonista';
 
 async function loadMembers(){
@@ -640,7 +657,7 @@ function buildModalBody(k,dd,limit,feriado){
       html+='</div><div class="btn-icon-row">';
 
       // Botões gestão
-      if(canManage()&&assigned)html+=`<button class="btn-remove-turno" data-k="${k}" data-uco="${uco}" data-tid="${t.id}"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
+      if(canManageUco(uco)&&assigned)html+=`<button class="btn-remove-turno" data-k="${k}" data-uco="${uco}" data-tid="${t.id}"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
 
       // Botões plantonista/qualquer
       if(assigned&&isMyShift&&!anunciado)html+=`<button class="btn-turno-action btn-anunciar" data-k="${k}" data-uco="${uco}" data-tid="${t.id}">📢 Anunciar</button>`;
@@ -655,7 +672,7 @@ function buildModalBody(k,dd,limit,feriado){
     });
 
     // Add row gestão
-    if(canManage()&&!isFull){
+    if(canManageUco(uco)&&!isFull){
       const available=Object.keys(members).filter(u=>!(dd[uco]&&Object.values(dd[uco]).includes(u))&&!userOnDay(u,k));
       const vacantTurnos=TURNOS.filter(t=>!(dd[uco]&&dd[uco][t.id]));
       if(available.length>0&&vacantTurnos.length>0){
@@ -668,7 +685,7 @@ function buildModalBody(k,dd,limit,feriado){
     }
 
     // Candidaturas pendentes (gestão)
-    if(canManage()&&pendingCands.length>0){
+    if(canManageUco(uco)&&pendingCands.length>0){
       html+=`<div class="cand-section"><div class="cand-title">Candidaturas pendentes</div>`;
       pendingCands.forEach(c=>{
         const t=TURNOS.find(x=>x.id===c.turnoId);const nome=members[c.candidato]?.name||c.candidato;
@@ -709,7 +726,7 @@ async function addTurno(k,uco){
 }
 
 async function removeTurno(k,uco,tid){
-  if(!canManage())return;
+  if(!canManageUco(uco))return;
   const name=members[schedule[k]?.[uco]?.[tid]]?.name||'';
   if(schedule[k]&&schedule[k][uco])schedule[k][uco][tid]=null;
   // Remove anuncio se existir
@@ -932,9 +949,11 @@ function renderMembers(){
   if(!entries.length){list.innerHTML='<p class="empty-state">Nenhum membro.</p>';return;}
   const roleLabels={admin:'Admin',coord:'Coordenador',plantonista:'Plantonista'};
   const roleClasses={admin:'role-admin',coord:'role-coord',plantonista:'role-plantonista'};
+  const UCO_NAMES_SHORT={a:'Coronária',b:'PO'};
   list.innerHTML=entries.map(([u,m])=>{
     const bg=avatarBg(m.color||0);
-    const roleBadge=`<span class="role-badge ${roleClasses[m.role]||'role-plantonista'}" style="font-size:10px;">${roleLabels[m.role]||m.role}</span>`;
+    const ucoLabel=m.role==='coord'&&m.uco?` · UCO-${UCO_NAMES_SHORT[m.uco]}`:'';
+    const roleBadge=`<span class="role-badge ${roleClasses[m.role]||'role-plantonista'}" style="font-size:10px;">${roleLabels[m.role]||m.role}${ucoLabel}</span>`;
     const rmBtn=m.role!=='admin'?`<button class="btn-danger rm-member" data-u="${u}">Remover</button>`:'';
     return`<div class="member-row"><div class="avatar" style="background:${bg};color:#fff;width:34px;height:34px;font-size:12px;">${initials(m.name)}</div><div class="member-info"><div class="member-name-row">${m.name}${roleBadge}</div><div class="member-meta">@${u}</div></div>${rmBtn}</div>`;
   }).join('');
@@ -943,9 +962,12 @@ function renderMembers(){
 
 async function addMember(){
   const name=document.getElementById('new-name').value.trim();const user=document.getElementById('new-user').value.trim().toLowerCase();const pass=document.getElementById('new-pass').value;const role=document.getElementById('new-role').value;
+  const uco=role==='coord'?document.getElementById('new-uco').value:'';
   if(!name||!user||!pass){showToast('Preencha todos os campos');return;}
   if(members[user]){showToast('Usuário já existe');return;}
-  members[user]={name,pass,color:Object.keys(members).length%8,role};
+  const entry={name,pass,color:Object.keys(members).length%8,role};
+  if(uco)entry.uco=uco;
+  members[user]=entry;
   await saveMembers();document.getElementById('new-name').value='';document.getElementById('new-user').value='';document.getElementById('new-pass').value='';
   renderMembers();showToast(`${name} adicionado(a)!`);
 }
@@ -995,7 +1017,15 @@ function showTab(name){
   document.getElementById(`tab-${name}`).classList.remove('hidden');
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
   document.querySelector(`.tab[data-tab="${name}"]`)?.classList.add('active');
-  if(name==='team')renderMembers();
+  if(name==='team'){
+    renderMembers();
+    // Show/hide UCO field based on role
+    const roleEl=document.getElementById('new-role');
+    const ucoField=document.getElementById('new-uco-field');
+    const toggleUco=()=>{ucoField.style.display=roleEl.value==='coord'?'block':'none';};
+    toggleUco();
+    roleEl.onchange=toggleUco;
+  }
   if(name==='trocas')populateTrocaForm();
   if(name==='candidaturas')renderCandidaturas();
   if(name==='anuncios')renderAnuncios();
