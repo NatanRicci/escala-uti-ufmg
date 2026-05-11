@@ -547,9 +547,8 @@ window.updateAvailPeople_b=function(tid){_updateAvailPeople('b',tid);};
 function _updateAvailPeople(uco,tid){
   const state=window._modalState[uco];if(!state)return;
   const sel=document.getElementById(`sel-p-${uco}`);if(!sel)return;
-  const filtered=state.available.filter(u=>!userOnSameTurnoInline(u,state.k,uco,tid,state.dd));
-  sel.innerHTML=filtered.map(u=>`<option value="${u}">${members[u].name}</option>`).join('');
-  if(!filtered.length)sel.innerHTML='<option value="">Nenhum disponível</option>';
+  const filtered=state.available.filter(u=>!(state.dd[uco]&&state.dd[uco][tid]===u)&&!userOnSameTurnoInline(u,state.k,uco,tid,state.dd));
+  sel.innerHTML=filtered.length?filtered.map(u=>`<option value="${u}">${members[u].name}</option>`).join(''):'<option value="">Nenhum disponível</option>';
 }
 function isAnunciado(k,uco,tid){return !!(anuncios[k]&&anuncios[k][uco]&&anuncios[k][uco][tid]);}
 function hasAnuncioOnDay(k){return UCOS.some(uco=>TURNOS.some(t=>isAnunciado(k,uco,t.id)));}
@@ -701,15 +700,16 @@ function buildModalBody(k,dd,limit,feriado){
 
     // Add row gestão
     if(canManageUco(uco)&&!isFull){
-      const available=Object.keys(members).filter(u=>!(dd[uco]&&Object.values(dd[uco]).includes(u)));
+      const allMembers=Object.keys(members);
       const vacantTurnos=TURNOS.filter(t=>!(dd[uco]&&dd[uco][t.id]));
-      if(available.length>0&&vacantTurnos.length>0){
-        registerModalState(k,uco,dd,available);
+      if(allMembers.length>0&&vacantTurnos.length>0){
+        // available por turno: exclui quem já está naquele turno específico ou no mesmo turno na outra UCO
         const firstTid=vacantTurnos[0].id;
-        const filteredFirst=available.filter(u=>!userOnSameTurnoInline(u,k,uco,firstTid,dd));
+        const availableForFirst=allMembers.filter(u=>!(dd[uco]&&dd[uco][firstTid]===u)&&!userOnSameTurnoInline(u,k,uco,firstTid,dd));
+        registerModalState(k,uco,dd,allMembers);
         html+=`<div class="add-turno-row">
           <select id="sel-t-${uco}" onchange="updateAvailPeople_${uco}(this.value)">${vacantTurnos.map(t=>`<option value="${t.id}">${t.label} (${t.time})</option>`).join('')}</select>
-          <select id="sel-p-${uco}">${filteredFirst.length?filteredFirst.map(u=>`<option value="${u}">${members[u].name}</option>`).join(''):'<option value="">Nenhum disponível</option>'}</select>
+          <select id="sel-p-${uco}">${availableForFirst.length?availableForFirst.map(u=>`<option value="${u}">${members[u].name}</option>`).join(''):'<option value="">Nenhum disponível</option>'}</select>
           <button class="btn-add-turno btn-add-${uco}" data-uco="${uco}">Adicionar</button>
         </div>`;
       }
@@ -857,7 +857,6 @@ async function candidatarModal(k,uco,tid){
 async function aprovarCandidatura(cid,k,uco,tid,u){
   const [ys,ms,ds]=k.split('-').map(Number);const limit=getLimit(ys,ms-1,ds);const dd=getDayData(k);
   if(countSlots(dd,uco)>=limit){showToast('Limite atingido!');return;}
-  if(userOnUco(u,k,uco)){showToast(`${members[u]?.name} já está escalado(a) nesta UCO neste dia!`);return;}
   if(userOnSameTurno(u,k,uco,tid)){showToast(`${members[u]?.name} já está no mesmo turno na outra UCO!`);return;}
   if(dd[uco]&&dd[uco][tid]){showToast('Turno já preenchido!');return;}
   if(!schedule[k])schedule[k]=emptyDay();
