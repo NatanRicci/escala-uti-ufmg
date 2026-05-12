@@ -977,88 +977,76 @@ function renderCandidaturas(){
 
 // REPETIR MÊS
 function repeatMonth(){
-  const nextM=viewMonth===11?0:viewMonth+1;const nextY=viewMonth===11?viewYear+1:viewYear;
+  const nextM=viewMonth===11?0:viewMonth+1;
+  const nextY=viewMonth===11?viewYear+1:viewYear;
   showConfirm('Repetir escala por padrão',
-    `Copiar o padrão de ${MESES[viewMonth]} de ${viewYear} para ${MESES[nextM]} de ${nextY}? O sistema replica o padrão por dia da semana e intervalo. Você poderá editar depois.`,
+    `Copiar o padrão de ${MESES[viewMonth]} de ${viewYear} para ${MESES[nextM]} de ${nextY}? O sistema replica mantendo o dia da semana e o intervalo de cada plantonista.`,
     async()=>{
       const srcPrefix=`${viewYear}-${String(viewMonth+1).padStart(2,'0')}-`;
       const srcKeys=Object.keys(schedule).filter(k=>k.startsWith(srcPrefix));
       if(!srcKeys.length){showToast('Nenhuma escala para copiar');return;}
 
-      // Agrupa por plantonista + UCO + turno + dia da semana
-      // key: user||uco||tid||dow
-      const patterns={};
+      // Monta lista de ocorrências: { user, uco, tid, dow, weekIndex }
+      // weekIndex = qual ocorrência do dia da semana no mês (0=primeira, 1=segunda, etc.)
+      const occurrences=[]; // {user, uco, tid, dow, weekIndex}
+
       srcKeys.forEach(k=>{
         const [y,m,d]=k.split('-').map(Number);
-        const dow=new Date(y,m-1,d).getDay();
+        const dt=new Date(y,m-1,d);
+        const dow=dt.getDay();
+        // Calcula qual é a Nth ocorrência deste dia da semana no mês
+        // Ex: primeiro sábado=0, segundo sábado=1, etc.
+        const weekIndex=Math.floor((d-1)/7);
         const dd=getDayData(k);
         UCOS.forEach(uco=>{
           TURNOS.forEach(t=>{
             const u=dd[uco]&&dd[uco][t.id];
             if(!u)return;
-            const pk=`${u}||${uco}||${t.id}||${dow}`;
-            if(!patterns[pk])patterns[pk]={user:u,uco,tid:t.id,dow,days:[]};
-            patterns[pk].days.push(d);
+            occurrences.push({user:u,uco,tid:t.id,dow,weekIndex});
           });
         });
       });
 
-      const daysInNext=new Date(nextY,nextM+1,0).getDate();
+      if(!occurrences.length){showToast('Nenhuma escala para copiar');return;}
 
-      // Todos os dias do próximo mês agrupados por dia da semana
-      const dowDays={}; // dow -> [1,8,15,22,29,...]
+      // Detecta intervalo por plantonista+uco+tid+dow
+      // Agrupa ocorrências e vê quantas vezes aparece no mês por dow
+      const patternKey=(o)=>`${o.user}||${o.uco}||${o.tid}||${o.dow}`;
+      const grouped={};
+      occurrences.forEach(o=>{
+        const k=patternKey(o);
+        if(!grouped[k])grouped[k]={...o,weekIndexes:[]};
+        grouped[k].weekIndexes.push(o.weekIndex);
+      });
+
+      // Gera mapa de dias do próximo mês por dow e weekIndex
+      // dowMap[dow][weekIndex] = dia do mês
+      const daysInNext=new Date(nextY,nextM+1,0).getDate();
+      const dowMap={}; // dow -> [dia1, dia2, dia3, dia4, (dia5?)]
       for(let d=1;d<=daysInNext;d++){
         const dow=new Date(nextY,nextM,d).getDay();
-        if(!dowDays[dow])dowDays[dow]=[];
-        dowDays[dow].push(d);
+        if(!dowMap[dow])dowMap[dow]=[];
+        dowMap[dow].push(d);
       }
 
       let copied=0;
-      Object.values(patterns).forEach(p=>{
-        p.days.sort((a,b)=>a-b);
-        const days=p.days;
+      Object.values(grouped).forEach(p=>{
+        p.weekIndexes.sort((a,b)=>a-b);
+        const targetDays=dowMap[p.dow]||[];
 
-        // Detecta intervalo em semanas
-        let intervalWeeks=1; // padrão: semanal
-        if(days.length>=2){
-          const diffs=[];
-          for(let i=1;i<days.length;i++)diffs.push(days[i]-days[i-1]);
-          // Moda das diferenças
-          const freq={};
-          diffs.forEach(d=>{freq[d]=(freq[d]||0)+1;});
-          let maxF=0,modalDiff=7;
-          Object.entries(freq).forEach(([diff,f])=>{if(f>maxF){maxF=f;modalDiff=parseInt(diff);}});
-          intervalWeeks=Math.max(1,Math.round(modalDiff/7));
-        } else {
-          intervalWeeks=2; // 1 ocorrência → assume quinzenal
-        }
-
-        // Pega os dias do próximo mês com o mesmo dia da semana
-        const candidates=dowDays[p.dow]||[];
-        if(!candidates.length)return;
-
-        // Detecta qual semana do mês o padrão começa
-        // Ex: se no mês atual começa na 1ª ocorrência do dia da semana → começa na 1ª do próximo também
-        // Pega o índice da primeira ocorrência no mês atual
-        const currentDowDays=[];
-        const daysInCurrent=new Date(viewYear,viewMonth+1,0).getDate();
-        for(let d=1;d<=daysInCurrent;d++){
-          if(new Date(viewYear,viewMonth,d).getDay()===p.dow)currentDowDays.push(d);
-        }
-        const startIdx=currentDowDays.indexOf(days[0]);
-        const startOffset=startIdx>=0?startIdx%intervalWeeks:0;
-
-        // Aplica: começa no mesmo índice relativo, depois salta de intervalWeeks em intervalWeeks
-        for(let i=startOffset;i<candidates.length;i+=intervalWeeks){
-          const d=candidates[i];
-          const tk=dayKey(nextY,nextM,d);
-          if(!schedule[tk])schedule[tk]=emptyDay();
-          if(!schedule[tk][p.uco])schedule[tk][p.uco]={t1:null,t2:null,t3:null};
-          if(!schedule[tk][p.uco][p.tid]){
-            schedule[tk][p.uco][p.tid]=p.user;
-            copied++;
+        // Para cada weekIndex do padrão, aplica no próximo mês
+        p.weekIndexes.forEach(wi=>{
+          if(wi<targetDays.length){
+            const d=targetDays[wi];
+            const tk=dayKey(nextY,nextM,d);
+            if(!schedule[tk])schedule[tk]=emptyDay();
+            if(!schedule[tk][p.uco])schedule[tk][p.uco]={t1:null,t2:null,t3:null};
+            if(!schedule[tk][p.uco][p.tid]){
+              schedule[tk][p.uco][p.tid]=p.user;
+              copied++;
+            }
           }
-        }
+        });
       });
 
       await saveSchedule();
@@ -1167,9 +1155,10 @@ function updateBadges(){
   document.getElementById('tab-btn-trocas').textContent=pendTrocas>0?`Trocas (${pendTrocas})`:'Trocas';
   const pendCand=canManage()?candidaturas.filter(c=>c.status==='pendente').length:candidaturas.filter(c=>c.candidato===currentUser&&c.status==='pendente').length;
   document.getElementById('tab-btn-cand').textContent=pendCand>0?`Candidaturas (${pendCand})`:'Candidaturas';
-  const now=new Date();const todayK=dayKey(now.getFullYear(),now.getMonth(),now.getDate());
-  const anunciosAtivos=Object.keys(anuncios).filter(k=>k>=todayK).reduce((acc,k)=>{UCOS.forEach(uco=>TURNOS.forEach(t=>{if(anuncios[k]&&anuncios[k][uco]&&anuncios[k][uco][t.id])acc++;}));return acc;},0);
-  document.getElementById('tab-btn-anuncios').textContent=anunciosAtivos>0?`Anúncios (${anunciosAtivos})`:'Anúncios';
+  getDocs(collection(db,'anuncios')).then(snap=>{
+    const ativos=snap.docs.filter(d=>d.data().status==='ativo').length;
+    document.getElementById('tab-btn-anuncios').textContent=ativos>0?`Anúncios (${ativos})`:'Anúncios';
+  });
 }
 
 // EXPORT ICS
