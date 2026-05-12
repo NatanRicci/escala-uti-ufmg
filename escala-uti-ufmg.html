@@ -239,6 +239,10 @@ main{max-width:860px;margin:0 auto;padding:1.5rem 1rem 4rem;}
     <div class="h-right">
       <span class="h-name" id="h-name"></span>
       <span class="role-badge" id="h-badge"></span>
+      <button class="btn-sm" id="btn-perfil-header" style="display:flex;align-items:center;gap:5px;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        Perfil
+      </button>
       <button class="btn-sm" id="btn-logout">Sair</button>
     </div>
   </header>
@@ -361,6 +365,32 @@ main{max-width:860px;margin:0 auto;padding:1.5rem 1rem 4rem;}
               </select>
             </div>
             <button class="btn-primary" id="btn-add-member" style="grid-column:1/-1;">Adicionar membro</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- PERFIL -->
+    <div id="tab-perfil" class="hidden">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Meu perfil</span></div>
+        <div class="card-body" style="display:grid;gap:16px;">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div id="perfil-avatar" style="width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff;flex-shrink:0;"></div>
+            <div>
+              <div id="perfil-nome" style="font-size:16px;font-weight:500;"></div>
+              <div id="perfil-user" style="font-size:13px;color:var(--muted);margin-top:2px;"></div>
+              <div id="perfil-role" style="margin-top:4px;"></div>
+            </div>
+          </div>
+          <hr style="border:none;border-top:1px solid var(--border);">
+          <div>
+            <p style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px;">Alterar senha</p>
+            <div style="display:grid;gap:10px;">
+              <div><label class="add-form-label">Senha atual</label><input type="password" id="senha-atual" placeholder="••••••••" style="width:100%;padding:9px 10px;border:1px solid var(--border-strong);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;"></div>
+              <div><label class="add-form-label">Nova senha</label><input type="password" id="senha-nova" placeholder="••••••••" style="width:100%;padding:9px 10px;border:1px solid var(--border-strong);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;"></div>
+              <div><label class="add-form-label">Confirmar nova senha</label><input type="password" id="senha-confirma" placeholder="••••••••" style="width:100%;padding:9px 10px;border:1px solid var(--border-strong);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;"></div>
+              <button class="btn-primary" id="btn-salvar-senha">Salvar nova senha</button>
+            </div>
           </div>
         </div>
       </div>
@@ -507,6 +537,8 @@ function startApp(){
   document.getElementById('btn-close-modal').onclick=closeModal;
   document.getElementById('modal-overlay').onclick=e=>{if(e.target===document.getElementById('modal-overlay'))closeModal();};
   document.getElementById('btn-add-member').onclick=addMember;
+  document.getElementById('btn-perfil-header').onclick=()=>showTab('perfil');
+  document.getElementById('btn-salvar-senha').onclick=salvarSenha;
   document.getElementById('btn-solicitar').onclick=solicitarTroca;
   document.getElementById('troca-pessoa').onchange=onTrocaPessoaChange;
   document.getElementById('btn-export-ics').onclick=exportICS;
@@ -519,7 +551,6 @@ function startApp(){
   unsubSched=onSnapshot(doc(db,'config','schedule'),snap=>{schedule=snap.exists()?snap.data():{};renderCalendar();renderStats();if(modalDay)openModal(modalDay.y,modalDay.m,modalDay.d);});
   onSnapshot(doc(db,'config','members'),snap=>{if(snap.exists()){members=snap.data();renderAnuncios();renderCalendar();}});
   unsubAnuncios=onSnapshot(collection(db,'anuncios'),snap=>{
-    // Reconstrói anuncios como objeto indexado por dayKey/uco/tid
     anuncios={};
     snap.docs.forEach(d=>{
       const a={id:d.id,...d.data()};
@@ -538,6 +569,39 @@ function startApp(){
   unsubCand=onSnapshot(collection(db,'candidaturas'),snap=>{candidaturas=snap.docs.map(d=>({id:d.id,...d.data()}));renderCandidaturas();updateBadges();if(modalDay)openModal(modalDay.y,modalDay.m,modalDay.d);});
 
   showTab('calendar');
+}
+
+// PERFIL
+function renderPerfil(){
+  const m=members[currentUser];if(!m)return;
+  const roleLabels={admin:'Admin',coord:'Coordenador',plantonista:'Plantonista'};
+  const roleClasses={admin:'role-admin',coord:'role-coord',plantonista:'role-plantonista'};
+  const UCO_NAMES_SHORT={a:'Coronária',b:'PO'};
+  document.getElementById('perfil-avatar').style.background=avatarBg(m.color||0);
+  document.getElementById('perfil-avatar').textContent=initials(m.name);
+  document.getElementById('perfil-nome').textContent=m.name;
+  document.getElementById('perfil-user').textContent=`@${currentUser}`;
+  const ucoLabel=m.role==='coord'&&m.uco?` · UCO-${UCO_NAMES_SHORT[m.uco]}`:'';
+  document.getElementById('perfil-role').innerHTML=`<span class="role-badge ${roleClasses[m.role]||'role-plantonista'}">${roleLabels[m.role]||m.role}${ucoLabel}</span>`;
+  document.getElementById('senha-atual').value='';
+  document.getElementById('senha-nova').value='';
+  document.getElementById('senha-confirma').value='';
+}
+
+async function salvarSenha(){
+  const atual=document.getElementById('senha-atual').value;
+  const nova=document.getElementById('senha-nova').value;
+  const confirma=document.getElementById('senha-confirma').value;
+  if(!atual||!nova||!confirma){showToast('Preencha todos os campos');return;}
+  if(members[currentUser].pass!==atual){showToast('Senha atual incorreta!');return;}
+  if(nova.length<4){showToast('Nova senha deve ter ao menos 4 caracteres');return;}
+  if(nova!==confirma){showToast('As senhas não coincidem!');return;}
+  members[currentUser].pass=nova;
+  await saveMembers();
+  document.getElementById('senha-atual').value='';
+  document.getElementById('senha-nova').value='';
+  document.getElementById('senha-confirma').value='';
+  showToast('Senha alterada com sucesso!');
 }
 
 // HELPERS
@@ -638,20 +702,23 @@ function renderCalendar(){
   }
 }
 
+const TURNO_HORAS={t1:6,t2:6,t3:12};
 function renderStats(){
   const daysInMonth=new Date(viewYear,viewMonth+1,0).getDate();
-  let myShifts=0,vacancies=0,totalDays=0;
+  let totalHoras=0,horasFds=0;
   for(let d=1;d<=daysInMonth;d++){
-    const k=dayKey(viewYear,viewMonth,d);const dd=getDayData(k);const limit=getLimit(viewYear,viewMonth,d);
-    const sA=countSlots(dd,'a'),sB=countSlots(dd,'b');
-    if(sA>0||sB>0)totalDays++;vacancies+=(limit-sA)+(limit-sB);
-    UCOS.forEach(uco=>TURNOS.forEach(t=>{if(dd[uco]&&dd[uco][t.id]===currentUser)myShifts++;}));
+    const k=dayKey(viewYear,viewMonth,d);const dd=getDayData(k);
+    const fds=isWeekend(viewYear,viewMonth,d)||!!isFeriado(viewYear,viewMonth,d);
+    UCOS.forEach(uco=>TURNOS.forEach(t=>{
+      if(dd[uco]&&dd[uco][t.id]===currentUser){
+        totalHoras+=TURNO_HORAS[t.id]||6;
+        if(fds)horasFds+=TURNO_HORAS[t.id]||6;
+      }
+    }));
   }
   document.getElementById('stats').innerHTML=`
-    <div class="stat"><div class="stat-label">Meus turnos</div><div class="stat-val">${myShifts}</div><div class="stat-sub">este mês</div></div>
-    <div class="stat"><div class="stat-label">Dias escalados</div><div class="stat-val">${totalDays}</div><div class="stat-sub">este mês</div></div>
-    <div class="stat"><div class="stat-label">Vagas abertas</div><div class="stat-val">${vacancies}</div><div class="stat-sub">este mês</div></div>
-    <div class="stat"><div class="stat-label">Equipe</div><div class="stat-val">${Object.keys(members).length}</div><div class="stat-sub">membros</div></div>
+    <div class="stat"><div class="stat-label">Horas no mês</div><div class="stat-val">${totalHoras}h</div><div class="stat-sub">${MESES[viewMonth]}</div></div>
+    <div class="stat"><div class="stat-label">Horas fim de semana</div><div class="stat-val">${horasFds}h</div><div class="stat-sub">e feriados</div></div>
   `;
 }
 
@@ -911,22 +978,95 @@ function renderCandidaturas(){
 // REPETIR MÊS
 function repeatMonth(){
   const nextM=viewMonth===11?0:viewMonth+1;const nextY=viewMonth===11?viewYear+1:viewYear;
-  showConfirm('Repetir escala',`Copiar a escala de ${MESES[viewMonth]} de ${viewYear} para ${MESES[nextM]} de ${nextY}? Você poderá editar depois.`,async()=>{
-    const srcPrefix=`${viewYear}-${String(viewMonth+1).padStart(2,'0')}-`;
-    const srcKeys=Object.keys(schedule).filter(k=>k.startsWith(srcPrefix));
-    if(!srcKeys.length){showToast('Nenhuma escala para copiar');return;}
-    let copied=0;
-    srcKeys.forEach(k=>{
-      const[,, d]=k.split('-');const day=parseInt(d);
-      const targetDt=new Date(nextY,nextM,day);
-      if(targetDt.getMonth()!==nextM)return;
-      const tk=dayKey(nextY,nextM,day);
-      schedule[tk]=JSON.parse(JSON.stringify(getDayData(k)));
-      copied++;
-    });
-    await saveSchedule();viewMonth=nextM;viewYear=nextY;renderCalendar();renderStats();
-    showToast(`${copied} dia(s) copiado(s)!`);
-  });
+  showConfirm('Repetir escala por padrão',
+    `Copiar o padrão de ${MESES[viewMonth]} de ${viewYear} para ${MESES[nextM]} de ${nextY}? O sistema replica o padrão por dia da semana e intervalo. Você poderá editar depois.`,
+    async()=>{
+      const srcPrefix=`${viewYear}-${String(viewMonth+1).padStart(2,'0')}-`;
+      const srcKeys=Object.keys(schedule).filter(k=>k.startsWith(srcPrefix));
+      if(!srcKeys.length){showToast('Nenhuma escala para copiar');return;}
+
+      // Agrupa por plantonista + UCO + turno + dia da semana
+      // key: user||uco||tid||dow
+      const patterns={};
+      srcKeys.forEach(k=>{
+        const [y,m,d]=k.split('-').map(Number);
+        const dow=new Date(y,m-1,d).getDay();
+        const dd=getDayData(k);
+        UCOS.forEach(uco=>{
+          TURNOS.forEach(t=>{
+            const u=dd[uco]&&dd[uco][t.id];
+            if(!u)return;
+            const pk=`${u}||${uco}||${t.id}||${dow}`;
+            if(!patterns[pk])patterns[pk]={user:u,uco,tid:t.id,dow,days:[]};
+            patterns[pk].days.push(d);
+          });
+        });
+      });
+
+      const daysInNext=new Date(nextY,nextM+1,0).getDate();
+
+      // Todos os dias do próximo mês agrupados por dia da semana
+      const dowDays={}; // dow -> [1,8,15,22,29,...]
+      for(let d=1;d<=daysInNext;d++){
+        const dow=new Date(nextY,nextM,d).getDay();
+        if(!dowDays[dow])dowDays[dow]=[];
+        dowDays[dow].push(d);
+      }
+
+      let copied=0;
+      Object.values(patterns).forEach(p=>{
+        p.days.sort((a,b)=>a-b);
+        const days=p.days;
+
+        // Detecta intervalo em semanas
+        let intervalWeeks=1; // padrão: semanal
+        if(days.length>=2){
+          const diffs=[];
+          for(let i=1;i<days.length;i++)diffs.push(days[i]-days[i-1]);
+          // Moda das diferenças
+          const freq={};
+          diffs.forEach(d=>{freq[d]=(freq[d]||0)+1;});
+          let maxF=0,modalDiff=7;
+          Object.entries(freq).forEach(([diff,f])=>{if(f>maxF){maxF=f;modalDiff=parseInt(diff);}});
+          intervalWeeks=Math.max(1,Math.round(modalDiff/7));
+        } else {
+          intervalWeeks=2; // 1 ocorrência → assume quinzenal
+        }
+
+        // Pega os dias do próximo mês com o mesmo dia da semana
+        const candidates=dowDays[p.dow]||[];
+        if(!candidates.length)return;
+
+        // Detecta qual semana do mês o padrão começa
+        // Ex: se no mês atual começa na 1ª ocorrência do dia da semana → começa na 1ª do próximo também
+        // Pega o índice da primeira ocorrência no mês atual
+        const currentDowDays=[];
+        const daysInCurrent=new Date(viewYear,viewMonth+1,0).getDate();
+        for(let d=1;d<=daysInCurrent;d++){
+          if(new Date(viewYear,viewMonth,d).getDay()===p.dow)currentDowDays.push(d);
+        }
+        const startIdx=currentDowDays.indexOf(days[0]);
+        const startOffset=startIdx>=0?startIdx%intervalWeeks:0;
+
+        // Aplica: começa no mesmo índice relativo, depois salta de intervalWeeks em intervalWeeks
+        for(let i=startOffset;i<candidates.length;i+=intervalWeeks){
+          const d=candidates[i];
+          const tk=dayKey(nextY,nextM,d);
+          if(!schedule[tk])schedule[tk]=emptyDay();
+          if(!schedule[tk][p.uco])schedule[tk][p.uco]={t1:null,t2:null,t3:null};
+          if(!schedule[tk][p.uco][p.tid]){
+            schedule[tk][p.uco][p.tid]=p.user;
+            copied++;
+          }
+        }
+      });
+
+      await saveSchedule();
+      viewMonth=nextM;viewYear=nextY;
+      renderCalendar();renderStats();
+      showToast(`${copied} turno(s) copiado(s)!`);
+    }
+  );
 }
 
 // TROCAS
@@ -1055,7 +1195,7 @@ function exportICS(){
 
 // TABS
 function showTab(name){
-  ['calendar','anuncios','candidaturas','trocas','team'].forEach(t=>document.getElementById(`tab-${t}`).classList.add('hidden'));
+  ['calendar','anuncios','candidaturas','trocas','team','perfil'].forEach(t=>{const el=document.getElementById(`tab-${t}`);if(el)el.classList.add('hidden');});
   document.getElementById(`tab-${name}`).classList.remove('hidden');
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
   document.querySelector(`.tab[data-tab="${name}"]`)?.classList.add('active');
@@ -1071,6 +1211,7 @@ function showTab(name){
   if(name==='trocas')populateTrocaForm();
   if(name==='candidaturas')renderCandidaturas();
   if(name==='anuncios'){renderAnuncios();setTimeout(renderAnuncios,800);}
+  if(name==='perfil')renderPerfil();
 }
 
 // CONFIRM
