@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -93,9 +94,11 @@ main{max-width:860px;margin:0 auto;padding:1.5rem 1rem 4rem;}
 .day.fim-semana .day-num{color:var(--muted);}
 .day-num{font-size:12px;font-weight:500;color:var(--text);line-height:1;margin-bottom:3px;}
 .day.today .day-num{color:var(--green);font-weight:700;}
-.day.has-vacancy{border-color:var(--amber-mid);}
-.day.full-day{border-color:var(--green-mid);}
+.day.has-vacancy{border-color:var(--red-mid);background:var(--red-light);}
+.day.full-day{border-color:var(--green-mid);background:var(--green-light);}
+.day.has-my-shift{border-color:var(--blue-mid);}
 .day.has-anuncio{box-shadow:0 0 0 2px var(--orange-mid);}
+.day.has-vacancy.has-anuncio{border-color:var(--red-mid);background:var(--red-light);box-shadow:0 0 0 2px var(--orange-mid);}
 .day.has-candidatura{box-shadow:0 0 0 2px var(--purple-mid);}
 .day-ucos{display:flex;flex-direction:column;gap:2px;width:100%;}
 .uco-bar{border-radius:3px;height:5px;width:100%;position:relative;overflow:hidden;}
@@ -285,8 +288,9 @@ main{max-width:860px;margin:0 auto;padding:1.5rem 1rem 4rem;}
         <div class="legend">
           <div class="legend-item"><div class="legend-swatch" style="background:var(--cor-a)"></div>UCO-Coronária</div>
           <div class="legend-item"><div class="legend-swatch" style="background:var(--cor-b)"></div>UCO-PO</div>
-          <div class="legend-item"><div class="legend-swatch" style="background:var(--amber-mid);border-radius:50%"></div>Vaga aberta</div>
+          <div class="legend-item"><div class="legend-swatch" style="background:var(--red-mid);border-radius:50%"></div>Vaga aberta</div>
           <div class="legend-item"><div class="legend-swatch" style="background:var(--green-mid);border-radius:50%"></div>Completa</div>
+          <div class="legend-item"><div class="legend-swatch" style="background:var(--blue-mid);border-radius:50%"></div>Meu plantão</div>
           <div class="legend-item"><div class="legend-swatch" style="background:var(--orange-mid);border-radius:50%"></div>Anúncio</div>
           <div class="legend-item"><div class="legend-swatch" style="background:var(--purple-mid);border-radius:50%"></div>Candidatura</div>
         </div>
@@ -683,20 +687,33 @@ function renderCalendar(){
     const dd=getDayData(k);const limit=getLimit(viewYear,viewMonth,d);
     const isToday=k===todayK;const feriado=isFeriado(viewYear,viewMonth,d);const weekend=isWeekend(viewYear,viewMonth,d);
     const sA=countSlots(dd,'a'),sB=countSlots(dd,'b');
-    const allFull=(sA>=limit&&sB>=limit);const hasAny=sA>0||sB>0;
-    const hasVacancy=hasAny&&!allFull;
+    const totalTurnos=TURNOS.length; // 3
+    const allFull=sA>=totalTurnos&&sB>=totalTurnos; // todos os 6 turnos preenchidos
+    const hasVacancy=!allFull;
     const hasCand=candidaturas.some(c=>c.dayKey===k&&c.status==='pendente');
     const hasAnuncio=hasAnuncioOnDay(k);
-    const fillA=limit>0?Math.round((sA/limit)*100):0;
-    const fillB=limit>0?Math.round((sB/limit)*100):0;
+
+    const myTurnosA=TURNOS.filter(t=>dd['a']&&dd['a'][t.id]===currentUser).length;
+    const myTurnosB=TURNOS.filter(t=>dd['b']&&dd['b'][t.id]===currentUser).length;
+    const myFillA=totalTurnos>0?Math.round((myTurnosA/totalTurnos)*100):0;
+    const myFillB=totalTurnos>0?Math.round((myTurnosB/totalTurnos)*100):0;
+    const hasMyShift=myTurnosA>0||myTurnosB>0;
+
     const el=document.createElement('div');
     let cls='day';
-    if(isToday)cls+=' today';if(feriado)cls+=' feriado';if(weekend&&!feriado)cls+=' fim-semana';
-    if(allFull)cls+=' full-day';else if(hasVacancy)cls+=' has-vacancy';
+    if(isToday)cls+=' today';
+    if(feriado)cls+=' feriado';
+    if(weekend&&!feriado)cls+=' fim-semana';
+    if(allFull)cls+=' full-day'; // verde só quando completo
+    else if(canManage())cls+=' has-vacancy'; // vermelho para gestão se tiver vaga
+    if(hasMyShift&&!allFull)cls+=' has-my-shift'; // destaque próprio se tiver plantão
     if(hasAnuncio)cls+=' has-anuncio';
-    else if(hasCand&&canManage())cls+=' has-candidatura';
+    if(hasCand&&canManage())cls+=' has-candidatura';
     el.className=cls;
-    el.innerHTML=`<span class="day-num">${d}</span><div class="day-ucos"><div class="uco-bar uco-bar-a"><div class="uco-fill uco-fill-a" style="width:${fillA}%"></div></div><div class="uco-bar uco-bar-b"><div class="uco-fill uco-fill-b" style="width:${fillB}%"></div></div></div>`;
+    el.innerHTML=`<span class="day-num">${d}</span><div class="day-ucos">
+      <div class="uco-bar uco-bar-a"><div class="uco-fill uco-fill-a" style="width:${myFillA}%"></div></div>
+      <div class="uco-bar uco-bar-b"><div class="uco-fill uco-fill-b" style="width:${myFillB}%"></div></div>
+    </div>`;
     el.addEventListener('click',()=>openModal(viewYear,viewMonth,d));
     grid.appendChild(el);
   }
