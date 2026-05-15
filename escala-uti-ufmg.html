@@ -460,9 +460,14 @@ function initials(n){return n.split(' ').slice(0,2).map(p=>p[0]).join('').toUppe
 function avatarBg(idx){return AVATAR_COLORS[(idx||0)%AVATAR_COLORS.length];}
 function emptyDay(){return{a:{t1:null,t2:null,t3:null},b:{t1:null,t2:null,t3:null}};}
 function getDayData(k){
-  const d=schedule[k]||emptyDay();
-  // Garantir que todos os turnos existem (compatibilidade com dados antigos)
-  UCOS.forEach(uco=>{if(!d[uco])d[uco]={t1:null,t2:null,t3:null};TURNOS.forEach(t=>{if(d[uco][t.id]===undefined)d[uco][t.id]=null;});});
+  const src=schedule[k];
+  // Retorna cópia com todos os turnos garantidos, SEM modificar o schedule original
+  const d={a:{t1:null,t2:null,t3:null},b:{t1:null,t2:null,t3:null}};
+  if(src){
+    UCOS.forEach(uco=>{
+      if(src[uco])TURNOS.forEach(t=>{d[uco][t.id]=src[uco][t.id]||null;});
+    });
+  }
   return d;
 }
 
@@ -495,22 +500,24 @@ async function loadMembers(){
 async function saveMembers(){await setDoc(doc(db,'config','members'),members);}
 async function saveSchedule(){
   try{
-    // Remove valores null antes de salvar (Firestore não preserva null em objetos aninhados)
     const clean={};
     Object.keys(schedule).forEach(k=>{
-      const dd=schedule[k];
+      const src=schedule[k];
+      if(!src)return;
       const cleanDay={};
       UCOS.forEach(uco=>{
+        if(!src[uco])return;
         const cleanUco={};
         TURNOS.forEach(t=>{
-          if(dd[uco]&&dd[uco][t.id])cleanUco[t.id]=dd[uco][t.id];
+          const v=src[uco][t.id];
+          if(v&&typeof v==='string')cleanUco[t.id]=v;
         });
         if(Object.keys(cleanUco).length>0)cleanDay[uco]=cleanUco;
       });
       if(Object.keys(cleanDay).length>0)clean[k]=cleanDay;
     });
     await setDoc(doc(db,'config','schedule'),clean);
-    schedule=clean; // atualiza local com versão limpa
+    schedule=clean;
   }catch(e){
     console.error('Erro ao salvar schedule:',e);
     showToast('Erro ao salvar! Tente novamente.');
@@ -868,7 +875,8 @@ async function addTurno(k,uco){
   const dd=getDayData(k);
   if(dd[uco]&&dd[uco][tid]){showToast('Turno já preenchido!');return;}
   if(userOnSameTurno(u,k,uco,tid)){showToast(`${members[u].name} já está escalado(a) neste mesmo turno na outra UCO!`);return;}
-  if(!schedule[k])schedule[k]=emptyDay();
+  if(!schedule[k])schedule[k]={};
+  if(!schedule[k][uco])schedule[k][uco]={};
   schedule[k][uco][tid]=u;
   await saveSchedule();
   showToast(`${members[u].name} adicionado(a)!`);
@@ -908,7 +916,8 @@ async function cancelarAnuncio(k,uco,tid){
 async function assumirAnuncio(k,uco,tid,prevUser){
   if(userOnSameTurno(currentUser,k,uco,tid)){showToast('Você já está neste turno na outra UCO!');return;}
   showConfirm('Assumir plantão',`Você vai assumir o plantão de ${members[prevUser]?.name||prevUser} em ${shiftLabel(k,uco,tid)}. Deseja continuar?`,async()=>{
-    if(!schedule[k])schedule[k]=emptyDay();
+    if(!schedule[k])schedule[k]={};
+    if(!schedule[k][uco])schedule[k][uco]={};
     schedule[k][uco][tid]=currentUser;
     await saveSchedule();
     const docA=anunciosDocs.find(a=>a.dayKey===k&&a.uco===uco&&a.turnoId===tid&&a.status==='ativo');
@@ -974,7 +983,8 @@ async function aprovarCandidatura(cid,k,uco,tid,u){
   if(countSlots(dd,uco)>=limit){showToast('Limite atingido!');return;}
   if(userOnSameTurno(u,k,uco,tid)){showToast(`${members[u]?.name} já está no mesmo turno na outra UCO!`);return;}
   if(dd[uco]&&dd[uco][tid]){showToast('Turno já preenchido!');return;}
-  if(!schedule[k])schedule[k]=emptyDay();
+  if(!schedule[k])schedule[k]={};
+  if(!schedule[k][uco])schedule[k][uco]={};
   schedule[k][uco][tid]=u;
   await saveSchedule();
   await updateDoc(doc(db,'candidaturas',cid),{status:'aprovada'});
