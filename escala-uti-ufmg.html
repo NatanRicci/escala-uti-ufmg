@@ -94,8 +94,8 @@ main{max-width:860px;margin:0 auto;padding:1.5rem 1rem 4rem;}
 .day-num{font-size:12px;font-weight:500;color:var(--text);line-height:1;margin-bottom:3px;}
 .day.today .day-num{color:var(--green);font-weight:700;}
 .day.has-vacancy{border-color:var(--red-mid);background:var(--red-light);}
-.day.has-my-shift{border-color:var(--blue-mid);border-width:2px;background:#fff;}
-.day.has-vacancy.has-my-shift{border-color:var(--blue-mid);border-width:2px;background:#fff;}
+.day.has-my-shift{border-bottom:3px solid var(--blue-mid);}
+.day.has-vacancy.has-my-shift{border-color:var(--red-mid);background:var(--red-light);border-bottom:3px solid var(--blue-mid);}
 .day.has-anuncio{box-shadow:0 0 0 2px var(--orange-mid);}
 .day.has-candidatura{box-shadow:0 0 0 2px var(--purple-mid);}
 .day-ucos{display:flex;flex-direction:column;gap:2px;width:100%;}
@@ -287,7 +287,8 @@ main{max-width:860px;margin:0 auto;padding:1.5rem 1rem 4rem;}
           <div class="legend-item"><div class="legend-swatch" style="background:var(--cor-a)"></div>UCO-Coronária</div>
           <div class="legend-item"><div class="legend-swatch" style="background:var(--cor-b)"></div>UCO-PO</div>
           <div class="legend-item"><div class="legend-swatch" style="background:var(--red-light);border:1px solid var(--red-mid);border-radius:3px;"></div>Vaga aberta</div>
-          <div class="legend-item"><div class="legend-swatch" style="border:2px solid var(--blue-mid);border-radius:3px;"></div>Meu plantão</div>
+          <div class="legend-item"><div style="width:18px;height:4px;background:#378ADD;border-radius:2px;"></div>Meu plantão Coronária</div>
+          <div class="legend-item"><div style="width:18px;height:4px;background:#1D9E75;border-radius:2px;"></div>Meu plantão PO</div>
           <div class="legend-item"><div class="legend-swatch" style="background:var(--orange-mid);border-radius:50%"></div>Anúncio</div>
           <div class="legend-item"><div class="legend-swatch" style="background:var(--purple-mid);border-radius:50%"></div>Candidatura</div>
         </div>
@@ -715,39 +716,33 @@ function renderCalendar(){
     const k=dayKey(viewYear,viewMonth,d);
     const dd=getDayData(k);const limit=getLimit(viewYear,viewMonth,d);
     const isToday=k===todayK;const feriado=isFeriado(viewYear,viewMonth,d);const weekend=isWeekend(viewYear,viewMonth,d);
-    const sA=countSlots(dd,'a'),sB=countSlots(dd,'b');
-    const totalTurnos=TURNOS.length;
-    // Verifica direto no schedule para garantir
     const rawDay=schedule[k]||{};
-    const rawA=rawDay['a']||{};
-    const rawB=rawDay['b']||{};
-    const countA=TURNOS.filter(t=>rawA[t.id]&&typeof rawA[t.id]==='string').length;
-    const countB=TURNOS.filter(t=>rawB[t.id]&&typeof rawB[t.id]==='string').length;
-    const allFull=countA>=totalTurnos&&countB>=totalTurnos;
-    const hasVacancy=!allFull;
+    const countA=Object.values(rawDay['a']||{}).filter(v=>v&&typeof v==='string').length;
+    const countB=Object.values(rawDay['b']||{}).filter(v=>v&&typeof v==='string').length;
+    const allFull=countA>=TURNOS.length&&countB>=TURNOS.length;
     const hasCand=candidaturas.some(c=>c.dayKey===k&&c.status==='pendente');
     const hasAnuncio=hasAnuncioOnDay(k);
 
-    const myTurnosA=TURNOS.filter(t=>dd['a']&&dd['a'][t.id]===currentUser).length;
-    const myTurnosB=TURNOS.filter(t=>dd['b']&&dd['b'][t.id]===currentUser).length;
-    const myFillA=totalTurnos>0?Math.round((myTurnosA/totalTurnos)*100):0;
-    const myFillB=totalTurnos>0?Math.round((myTurnosB/totalTurnos)*100):0;
-    const hasMyShift=myTurnosA>0||myTurnosB>0;
+    // Turnos do usuário logado por UCO
+    const myInA=TURNOS.some(t=>rawDay['a']&&rawDay['a'][t.id]===currentUser);
+    const myInB=TURNOS.some(t=>rawDay['b']&&rawDay['b'][t.id]===currentUser);
+    const hasMyShift=myInA||myInB;
 
     const el=document.createElement('div');
     let cls='day';
     if(isToday)cls+=' today';
     if(feriado)cls+=' feriado';
     if(weekend&&!feriado)cls+=' fim-semana';
-    if(!allFull)cls+=' has-vacancy'; // vermelho só se tiver vaga
-    if(hasMyShift)cls+=' has-my-shift'; // azul nos meus dias (sobrescreve vermelho via CSS)
+    if(!allFull)cls+=' has-vacancy';
     if(hasAnuncio)cls+=' has-anuncio';
     if(hasCand&&canManage())cls+=' has-candidatura';
     el.className=cls;
-    el.innerHTML=`<span class="day-num">${d}</span><div class="day-ucos">
-      <div class="uco-bar uco-bar-a"><div class="uco-fill uco-fill-a" style="width:${myFillA}%"></div></div>
-      <div class="uco-bar uco-bar-b"><div class="uco-fill uco-fill-b" style="width:${myFillB}%"></div></div>
-    </div>`;
+
+    // Barras de plantão próprio: laranja=Coronária, azul=PO
+    const barA=myInA?`<div style="height:4px;border-radius:2px;background:#378ADD;width:100%;margin-top:2px;"></div>`:'';
+    const barB=myInB?`<div style="height:4px;border-radius:2px;background:#1D9E75;width:100%;margin-top:2px;"></div>`:'';
+
+    el.innerHTML=`<span class="day-num">${d}</span>${barA}${barB}`;
     el.addEventListener('click',()=>openModal(viewYear,viewMonth,d));
     grid.appendChild(el);
   }
