@@ -493,7 +493,15 @@ async function loadMembers(){
   }
 }
 async function saveMembers(){await setDoc(doc(db,'config','members'),members);}
-async function saveSchedule(){await setDoc(doc(db,'config','schedule'),schedule);}
+async function saveSchedule(){
+  try{
+    await setDoc(doc(db,'config','schedule'),schedule);
+    console.log('Schedule salvo com sucesso:', JSON.stringify(schedule).substring(0,200));
+  }catch(e){
+    console.error('Erro ao salvar schedule:', e);
+    showToast('Erro ao salvar! Verifique o console.');
+  }
+}
 
 // AUTH
 document.getElementById('btn-login').onclick=doLogin;
