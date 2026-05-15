@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -730,7 +731,7 @@ function renderCalendar(){
     if(isToday)cls+=' today';
     if(feriado)cls+=' feriado';
     if(weekend&&!feriado)cls+=' fim-semana';
-    if(canManage())cls+=' has-vacancy'; // vermelho para todos os dias (gestão)
+    if(canManage()||true)cls+=' has-vacancy'; // vermelho para todos
     if(hasMyShift)cls+=' has-my-shift'; // azul nos meus dias (sobrescreve vermelho via CSS)
     if(hasAnuncio)cls+=' has-anuncio';
     if(hasCand&&canManage())cls+=' has-candidatura';
