@@ -495,11 +495,25 @@ async function loadMembers(){
 async function saveMembers(){await setDoc(doc(db,'config','members'),members);}
 async function saveSchedule(){
   try{
-    await setDoc(doc(db,'config','schedule'),schedule);
-    console.log('Schedule salvo com sucesso:', JSON.stringify(schedule).substring(0,200));
+    // Remove valores null antes de salvar (Firestore não preserva null em objetos aninhados)
+    const clean={};
+    Object.keys(schedule).forEach(k=>{
+      const dd=schedule[k];
+      const cleanDay={};
+      UCOS.forEach(uco=>{
+        const cleanUco={};
+        TURNOS.forEach(t=>{
+          if(dd[uco]&&dd[uco][t.id])cleanUco[t.id]=dd[uco][t.id];
+        });
+        if(Object.keys(cleanUco).length>0)cleanDay[uco]=cleanUco;
+      });
+      if(Object.keys(cleanDay).length>0)clean[k]=cleanDay;
+    });
+    await setDoc(doc(db,'config','schedule'),clean);
+    schedule=clean; // atualiza local com versão limpa
   }catch(e){
-    console.error('Erro ao salvar schedule:', e);
-    showToast('Erro ao salvar! Verifique o console.');
+    console.error('Erro ao salvar schedule:',e);
+    showToast('Erro ao salvar! Tente novamente.');
   }
 }
 
