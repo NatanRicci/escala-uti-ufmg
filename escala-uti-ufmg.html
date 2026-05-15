@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -636,7 +635,10 @@ async function salvarSenha(){
 }
 
 // HELPERS
-function countSlots(dd,uco){return TURNOS.filter(t=>dd[uco]&&dd[uco][t.id]).length;}
+function countSlots(dd,uco){
+  // Conta turnos preenchidos — verifica tanto dd quanto schedule direto
+  return TURNOS.filter(t=>dd[uco]&&dd[uco][t.id]&&typeof dd[uco][t.id]==='string').length;
+}
 function userOnDay(u,k){const dd=getDayData(k);return UCOS.some(uco=>TURNOS.some(t=>dd[uco]&&dd[uco][t.id]===u));}
 function userOnUco(u,k,uco){const dd=getDayData(k);return TURNOS.some(t=>dd[uco]&&dd[uco][t.id]===u);}
 function userOnSameTurno(u,k,uco,tid){
@@ -714,8 +716,14 @@ function renderCalendar(){
     const dd=getDayData(k);const limit=getLimit(viewYear,viewMonth,d);
     const isToday=k===todayK;const feriado=isFeriado(viewYear,viewMonth,d);const weekend=isWeekend(viewYear,viewMonth,d);
     const sA=countSlots(dd,'a'),sB=countSlots(dd,'b');
-    const totalTurnos=TURNOS.length; // 3
-    const allFull=sA>=totalTurnos&&sB>=totalTurnos; // todos os 6 turnos preenchidos
+    const totalTurnos=TURNOS.length;
+    // Verifica direto no schedule para garantir
+    const rawDay=schedule[k]||{};
+    const rawA=rawDay['a']||{};
+    const rawB=rawDay['b']||{};
+    const countA=TURNOS.filter(t=>rawA[t.id]&&typeof rawA[t.id]==='string').length;
+    const countB=TURNOS.filter(t=>rawB[t.id]&&typeof rawB[t.id]==='string').length;
+    const allFull=countA>=totalTurnos&&countB>=totalTurnos;
     const hasVacancy=!allFull;
     const hasCand=candidaturas.some(c=>c.dayKey===k&&c.status==='pendente');
     const hasAnuncio=hasAnuncioOnDay(k);
@@ -731,7 +739,7 @@ function renderCalendar(){
     if(isToday)cls+=' today';
     if(feriado)cls+=' feriado';
     if(weekend&&!feriado)cls+=' fim-semana';
-    if(canManage()||true)cls+=' has-vacancy'; // vermelho para todos
+    if(!allFull)cls+=' has-vacancy'; // vermelho só se tiver vaga
     if(hasMyShift)cls+=' has-my-shift'; // azul nos meus dias (sobrescreve vermelho via CSS)
     if(hasAnuncio)cls+=' has-anuncio';
     if(hasCand&&canManage())cls+=' has-candidatura';
